@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>UndoAge 补剂证据审查</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@600;900&family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@500&display=swap">
+<style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style>
+<style>
+/* Layout: 化验单式 — 顶部结论条 + 等级分布，下方逐品"检验条目"，每条左侧等级色签 */
+:root{
+  --bg:#f6f7f4; --paper:#ffffff; --ink:#1d2421; --muted:#5e6a64; --line:#dde2dc;
+  --accent:#2f5d50;
+  --gA:#1f7a4d; --gB:#2b6a8f; --gC:#b07415; --gD:#b23a32;
+  --gA-bg:#e3f2ea; --gB-bg:#e2eef5; --gC-bg:#f8eedb; --gD-bg:#f7e2df;
+  --warn-bg:#fff6e5;
+  --f-display:"Noto Serif SC","Songti SC",serif;
+  --f-body:"Noto Sans SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#121614; --paper:#1a1f1c; --ink:#e4e9e5; --muted:#99a49e; --line:#2c3430;
+  --accent:#8cc5b2;
+  --gA:#6fd29e; --gB:#7dbbe0; --gC:#e8b45a; --gD:#f08a80;
+  --gA-bg:#17301f; --gB-bg:#162a36; --gC-bg:#33270f; --gD-bg:#3a1b18;
+  --warn-bg:#2a2414; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#121614; --paper:#1a1f1c; --ink:#e4e9e5; --muted:#99a49e; --line:#2c3430;
+  --accent:#8cc5b2;
+  --gA:#6fd29e; --gB:#7dbbe0; --gC:#e8b45a; --gD:#f08a80;
+  --gA-bg:#17301f; --gB-bg:#162a36; --gC-bg:#33270f; --gD-bg:#3a1b18;
+  --warn-bg:#2a2414; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.7;margin:0}
+.wrap{max-width:960px;margin:0 auto;padding-inline:16px;padding-block:32px 64px}
+h1{font-family:var(--f-display);font-weight:900;font-size:clamp(26px,5vw,38px);line-height:1.25;margin:0 0 8px;text-wrap:balance}
+h2{font-family:var(--f-display);font-weight:600;font-size:21px;margin:40px 0 12px;text-wrap:balance}
+.sub{color:var(--muted);max-width:65ch;margin:0}
+.verdict{margin-top:24px;background:var(--paper);border:1px solid var(--line);border-radius:6px;padding:20px}
+.verdict p{margin:0 0 10px;max-width:70ch}
+.verdict p:last-child{margin:0}
+.dist{display:flex;height:34px;border-radius:4px;overflow:hidden;margin:20px 0 8px}
+.dist div{display:flex;align-items:center;justify-content:center;color:#fff;font-family:var(--f-mono);font-size:13px;min-width:28px}
+.legend{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px 20px;margin-top:12px}
+.legend div{display:flex;gap:10px;align-items:flex-start;font-size:14px}
+.legend b{font-family:var(--f-mono)}
+.pill{display:inline-flex;align-items:center;justify-content:center;font-family:var(--f-mono);font-weight:500;font-size:13px;width:28px;height:28px;border-radius:4px;flex:none}
+.pA{background:var(--gA-bg);color:var(--gA)} .pB{background:var(--gB-bg);color:var(--gB)}
+.pC{background:var(--gC-bg);color:var(--gC)} .pD{background:var(--gD-bg);color:var(--gD)}
+.keyfind{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+.kf{background:var(--paper);border:1px solid var(--line);border-radius:6px;padding:16px}
+.kf h3{margin:0 0 6px;font-size:15px}
+.kf p{margin:0;color:var(--muted);font-size:14px}
+.controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0 16px;position:sticky;top:env(safe-area-inset-top,0px);background:var(--bg);padding-block:10px;z-index:2}
+.controls button{font:inherit;font-size:14px;border:1px solid var(--line);background:var(--paper);color:var(--ink);padding:5px 12px;border-radius:999px;cursor:pointer}
+.controls button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--bg)}
+.controls button:focus-visible,.controls input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.controls input{font:inherit;font-size:14px;flex:1 1 160px;min-width:0;border:1px solid var(--line);background:var(--paper);color:var(--ink);padding:5px 12px;border-radius:999px}
+.list{display:grid;gap:10px}
+.item{background:var(--paper);border:1px solid var(--line);border-left:5px solid var(--c);border-radius:4px;padding:14px 16px;min-width:0}
+.head{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:baseline}
+.no{font-family:var(--f-mono);color:var(--muted);font-size:13px}
+.name{font-weight:700;font-size:16px}
+.price{font-family:var(--f-mono);color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums}
+.ratings{margin-left:auto;display:flex;gap:8px;align-items:center;font-size:13px;color:var(--muted)}
+.orig{text-decoration:line-through;text-decoration-color:var(--gD)}
+.orig.same{text-decoration:none}
+.ev{margin:8px 0 0}
+.fix{margin:8px 0 0;background:var(--warn-bg);padding:8px 10px;border-radius:4px;font-size:14px}
+.fix b,.who b{font-weight:700}
+.who{margin:6px 0 0;font-size:14px;color:var(--muted)}
+.empty{color:var(--muted);padding:20px 0}
+.refs{margin:10px 0 0;font-size:13px;border-top:1px dashed var(--line);padding-top:8px}
+.refs ul{margin:4px 0 0;padding-left:18px;display:grid;gap:2px}
+.refs a,.refs-none a{color:var(--accent);text-underline-offset:2px;word-break:break-word}
+.refs-none{margin:10px 0 0;font-size:13px;color:var(--muted);border-top:1px dashed var(--line);padding-top:8px}
+.tag{font-size:11px;margin-left:6px;padding:0 5px;border:1px solid var(--line);border-radius:3px;color:var(--muted)}
+.foot{margin-top:40px;color:var(--muted);font-size:13px;max-width:70ch}
+.foot a{color:var(--accent)}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <h1>UndoAge 45 款补剂：哪些有临床证据，哪些是智商税</h1>
+  <p class="sub">逐条审查你抓下来的产品表。等级是我按人体随机对照试验（RCT）的质量和结论重新打的，右侧划掉的是表格里原有的"科研支撑强度"。</p>
+
+  <section class="verdict">
+    <p><b>结论：</b>真正有硬证据的只有 3 款（维生素D两款、肌酸），而且是对"对的人"有用。15 款有证据但只适用于特定人群或剂量；22 款证据薄弱，主要靠动物实验或原料商资助的小试验；5 款已被高质量研究基本否定。</p>
+    <p><b>这张表本身也不可信。</b>原表的"科研支撑强度"没有一款低于"中等"，且多处引用是编造或张冠李戴的（比如"2019 JAMA 南非醉茄研究"不存在、"2020 Cell Metab 老年女性骨密度"其实是小鼠实验）。看起来是 AI 生成的营销向内容，45 款里我下调了 <span id="downN">—</span> 款。</p>
+    <div class="dist" id="dist" aria-label="等级分布"></div>
+    <div class="legend">
+      <div><span class="pill pA">A</span><span><b>证据扎实</b>：大型高质量RCT支持，对目标人群确有效</span></div>
+      <div><span class="pill pB">B</span><span><b>有条件有效</b>：只对特定人群/剂量，或证据有争议</span></div>
+      <div><span class="pill pC">C</span><span><b>证据薄弱</b>：动物/体外为主，人体只有小样本或厂商资助研究</span></div>
+      <div><span class="pill pD">D</span><span><b>基本智商税</b>：高质量研究结论为无效</span></div>
+    </div>
+  </section>
+
+  <h2>几个贯穿全表的问题</h2>
+  <div class="keyfind">
+    <div class="kf"><h3>把"体外/小鼠"当成"人体有效"</h3><p>NMN、NR、AKG、亚精胺、PQQ、尿石素A 这类"抗衰"成分，能提高血液里某个指标是真的，但没有任何一款被证明能延缓人类衰老。美国国家衰老研究所的标准化小鼠测试里，NR 连小鼠寿命都没延长。</p></div>
+    <div class="kf"><h3>借用别的产品的证据</h3><p>REDUCE-IT 证明的是处方级纯EPA每天4克；表里的普通鱼油、补充剂级EPA鱼油剂量和成分都不同，不能套用。益生菌只看具体菌株，表里写"可能含……"等于无法对应任何研究。</p></div>
+    <div class="kf"><h3>把药当保健品卖贵</h3><p>小檗碱（黄连素）、水飞蓟宾在国内是药品，药店几块钱；活性B族78元/月，同表蓝帽子B族5.85元/月。真正有用的那几款反而都便宜。</p></div>
+    <div class="kf"><h3>合规风险（如果你要做推广）</h3><p>国内只有"蓝帽子"保健食品能宣称功能，表中多数标"普通膳食补充剂"却写着降糖、护肝、抗衰。NMN 在2021年就被市场监管总局明确未获食品类许可，不得作为食品生产销售。</p></div>
+  </div>
+
+  <h2>逐款审查</h2>
+  <div class="controls" role="group" aria-label="筛选">
+    <button type="button" data-g="all" aria-pressed="true">全部</button>
+    <button type="button" data-g="A" aria-pressed="false">A 证据扎实</button>
+    <button type="button" data-g="B" aria-pressed="false">B 有条件</button>
+    <button type="button" data-g="C" aria-pressed="false">C 薄弱</button>
+    <button type="button" data-g="D" aria-pressed="false">D 智商税</button>
+    <input id="q" type="search" placeholder="搜品名或成分" aria-label="搜索">
+  </div>
+  <div class="list" id="list"></div>
+  <p class="empty" id="empty" hidden>没有匹配的产品。</p>
+
+  <p class="foot">每款下方的"研究原文"链接多数指向期刊原文页（DOI）或 PubMed / PMC 全文；标"报道"的是转述研究的行业新闻或官方新闻稿。<br>说明：这是基于公开临床研究的科普性评估，不构成医疗建议。正在服用抗凝药、降糖药、他汀等处方药，或孕期、哺乳期、有肝肾疾病的人，补充任何东西前先问医生。部分依据：<a href="https://www.cosmeticsdesign.com/Article/2025/08/26/industry-reacts-to-meta-analysis-concluding-collagen-supplements-show-no-proven-benefit-for-skin-aging" target="_blank" rel="noopener">胶原蛋白荟萃分析（2025）</a>、<a href="https://www.nutraingredients.com/Article/2026/07/06/timeline-will-authorities-de-throne-the-king-of-herbs/" target="_blank" rel="noopener">南非醉茄监管时间线</a>、<a href="https://www.fightaging.org/archives/2021/04/the-latest-data-from-the-interventions-testing-program-nicotinamide-riboside-has-no-effect-on-mouse-life-span/" target="_blank" rel="noopener">ITP：NR 未延长小鼠寿命</a>、<a href="https://www.nutraingredients.com/Article/2024/01/18/study-links-vitamin-k2-and-d-to-cardiovascular-disease" target="_blank" rel="noopener">AVADEC K2 试验</a>、<a href="https://m.huxiu.com/article/4845711.html" target="_blank" rel="noopener">NMN 国内监管现状</a>。</p>
+</div>
+
+<script>
+const D=[
+[1,"鱼油 95%纯度","69","极强","B","每天2–4克可降低甘油三酯，这点确定。但普通人吃鱼油预防心血管的大型RCT（VITAL、ASCEND）均为阴性；干眼症的DREAM试验（NEJM 2018）也是阴性。","引用的REDUCE-IT用的是处方纯EPA每天4克，不是普通EPA+DHA鱼油；同剂量EPA+DHA的STRENGTH试验是阴性。高剂量会增加房颤风险。","甘油三酯偏高、平时不吃鱼的人"],
+[2,"AKK自律菌","149","中等偏强","C","人体证据只有2019年《自然·医学》一项32人试点RCT，而且效果更明显的是巴氏灭活的死菌，不是活菌。","\"2023年RCT改善代谢指标\"对不上确切的大型试验；\"肠漏\"不是正式诊断。全表第二贵。","暂无明确推荐人群"],
+[3,"NMN 60000","74.8","中等","C","能升高血液NAD+是确定的；临床获益只有小样本研究（如2021年Science上25名女性的胰岛素敏感性），结果不一致，没有证据延缓人类衰老。","\"动物研究极强（寿命延长）\"夸大，小鼠延寿未被独立重复。\"市面同品质3200–8000元\"是营销话术。国内2021年已明确NMN不得作为食品生产销售。","不推荐"],
+[4,"TMG NMN好伴侣","34.1","强","C","甜菜碱每天约4克能小幅降低同型半胱氨酸，这是真的。","\"吃NMN会耗甲基、必须配TMG\"只是理论推测，来自网红科学家的个人方案，没有临床试验证明需要。降同型半胱氨酸本身也没被证明能减少心梗中风。高剂量可能升高LDL。","不推荐作为\"NMN伴侣\"购买"],
+[5,"还原型辅酶Q10 kaneka","99","强","B","心衰辅助治疗有Q-SYMBIO（420人）一项阳性试验；他汀相关肌痛的荟萃分析结论互相矛盾；降血压的Cochrane综述无显著效果；健康人无获益证据。","\"大量RCT支持心衰\"夸大，核心只有一项；泛醇\"吸收高3–5倍\"各研究结果不一。","心衰患者在医生指导下；他汀肌痛可尝试"],
+[6,"麦角硫因+谷胱甘肽","78.2","中等偏强","C","麦角硫因的人体证据主要是观察性研究（血中水平高的人死亡率低），补充剂RCT很少；口服谷胱甘肽能否吸收，研究结论相反；口服美白只有低质量小研究。","\"长寿维生素\"只是一位学者提出的假说，不是共识。","不推荐"],
+[7,"专利L-苏糖酸镁","94.8","强","C","人体只有少数小样本试验，多数由原料商资助。","2010年首篇发表在Neuron（不是Nature），而且是大鼠实验；\"唯一能提升脑镁\"也只在大鼠上证明；偏头痛的证据来自普通镁，不是苏糖酸镁。每份所含元素镁也偏低。","确实缺镁的话，甘氨酸镁、柠檬酸镁便宜得多"],
+[8,"姜黄素 BCM-95","78.2","强","C","膝骨关节炎、抑郁有一些小RCT，但普遍样本小、偏倚风险高。2017年《药物化学杂志》的大型综述认为姜黄素化学性质不稳定，没有一项双盲试验确证疗效。","\"数千篇研究\"大多是体外实验。高吸收配方有药物性肝损伤的病例报告（意大利2019年聚集病例）。","证据不足以推荐"],
+[9,"AKG","37.05","中等","C","人体只有一项无对照的42人小研究（测\"生物年龄\"）。","\"2020年Cell Metab研究显示老年女性骨密度改善\"是张冠李戴，那篇是小鼠延寿研究。","不推荐"],
+[10,"PQQ+PS","88.2","中等偏强","C","PQQ人体研究是日本原料商资助的小试验；PS早期证据来自牛脑来源，现在的大豆PS证据更弱。","\"PS是FDA认可\"误导：FDA给的是限定性健康声明，原文写的是\"非常有限且初步的研究\"。PQQ\"线粒体维生素\"的说法在同刊被反驳过，PQQ不是维生素。","不推荐"],
+[11,"南非醉茄","68.2","中等偏强","B","缓解压力和焦虑有多项小RCT，荟萃分析显示有效，但质量中低，多由KSM-66原料商资助。","\"2019 JAMA\"这篇不存在。安全信号：丹麦2023年禁止用于膳食补充剂，荷兰2024年建议不要服用（有肝损伤报告），英国也在评估是否禁止；可能影响甲状腺。","短期减压可试；肝病、甲状腺病、孕妇避开"],
+[12,"虾青素","39.5","中等偏强","C","皮肤、眼疲劳只有日本小样本试验；运动恢复研究结果不一。","\"抗氧化能力极强\"是试管数据，不等于人体获益。","不推荐"],
+[13,"牡蛎精加强版","68.2","中等","D","锌只对缺锌者有用；牡蛎提取物提升睾酮/精力没有人体RCT。","\"海中牛奶\"是营销语。真缺锌，几块钱的葡萄糖酸锌就够。","不推荐"],
+[14,"奶蓟草水飞蓟宾","58.2","强","C","Cochrane综述：对酒精性、病毒性肝病的死亡率和肝组织没有显著影响，研究质量偏低；脂肪肝一项48周RCT主要终点未达标。","\"多项RCT支持酒精性肝病\"不准确。水飞蓟宾在国内是药品，肝有问题应该就医。","不推荐自行服用"],
+[15,"叶黄素PRO","68.2","强","B","AREDS2只证明：已有中期黄斑变性的人，用含叶黄素的配方能减缓进展。","AREDS2发表在JAMA不是NEJM；对健康人预防、白内障（AREDS2阴性）、\"防蓝光\"\"缓解视疲劳\"都没有可靠证据。","已确诊中期年龄相关黄斑变性者"],
+[16,"氨糖软骨素","78.2","中等(有争议)","D","2010年BMJ网状荟萃分析：无临床意义的效果。美国风湿病学会2019年指南明确反对使用氨糖。","GAIT试验的主要终点是阴性，\"中重度有效\"只是小亚组探索分析。\"软骨修复\"没有证据。","不推荐"],
+[17,"大豆异黄酮","58.2","中等","C","潮热有小幅缓解；骨密度的大型RCT（SPARE，2011）阴性；北美绝经学会不推荐用于潮热。","—","效果有限，有乳腺病史者先问医生"],
+[18,"亚精胺","68.2","中等偏强","C","唯一一项12个月RCT（SmartAge，JAMA Netw Open 2022，100人）记忆力指标阴性。","\"2018年RCT改善血压动脉弹性\"不对，2018年那篇是饮食观察研究。补充剂0.5–2毫克，日常饮食本身就摄入约10毫克级别，补充量几乎无差别。","不推荐"],
+[19,"纳豆激酶","39.1","中等","C","3年RCT（NAPS，265人，2021）对颈动脉粥样硬化进展无效；作为大分子酶，口服能否吸收存疑。","有颅内出血个案报告。\"溶血栓\"绝不能替代抗凝药。","不推荐；用抗凝/抗血小板药者禁用"],
+[20,"R-硫辛酸","44.5","强","B","糖尿病周围神经病变：阳性证据主要来自静脉注射；口服4年的NATHAN-1主要终点阴性，口服短期能缓解症状。减重效果约1公斤级。","东亚人中有诱发胰岛素自身免疫综合征（严重低血糖）的报告，中日病例较多，表格没提。","糖尿病神经病变患者在医生指导下"],
+[21,"尿石素A","168.2","中等偏强","C","2022年《细胞报告·医学》中年人肌力提升有阳性；2022年JAMA Netw Open（66名老人）主要终点6分钟步行未达标。所有试验均由原料公司资助。","2019年《自然·代谢》那篇是安全性和生物标志物I期试验，没有显示肌力改善。全表最贵。","证据不足以推荐"],
+[22,"尿酸与肺槲皮素","54.1","中等","C","降尿酸只有一项22人、4周的小研究；抗过敏、护肺大多是体外和动物数据。","\"肺槲皮素\"是营销命名。痛风请规范用药。","不推荐"],
+[23,"小檗碱","61.8","强","B","降糖降脂有大量RCT（多为国内小样本），荟萃分析糖化血红蛋白下降约0.5–0.7%，是这批里证据较好的植物成分。","\"与二甲双胍相当\"来自一项36人小试验。小檗碱在国内就是药（黄连素片），药店几块钱；药物相互作用多，孕妇和新生儿禁用。","血糖血脂偏高者先问医生，药店买药更便宜"],
+[24,"女士复合维生素","14.73","强","B","美国预防服务工作组2022年：没有足够证据显示复合维生素能预防心血管病或癌症；2024年39万人队列研究无死亡率获益。对饮食不均衡者是便宜的保险。","\"MTHFR突变要用甲基叶酸\"有争议，普通叶酸对携带者同样有效。","饮食不规律、节食、备孕（另需叶酸）"],
+[25,"男士复合维生素","14.73","强","B","同上：预防疾病证据不足，作为饮食保险可以。","锌、硒提升睾酮只对缺乏者成立。","饮食不规律者"],
+[26,"儿童液体钙镁锌","89","强","C","锌改善食欲和免疫，只对缺锌儿童成立；饮食正常、每天喝奶的孩子无需常规补钙。","\"4–8岁每日1000毫克、9–18岁1300毫克上限\"把推荐量当成了上限（真正上限约2500–3000毫克）。","经医生确认摄入不足的儿童"],
+[27,"婴幼少儿DHA藻油","44.1","强","C","Cochrane 2017：足月婴儿补充DHA对神经发育无明确获益。有效证据在孕妇（降低早产风险）。","把孕期证据套到婴幼儿身上。","孕妇比婴儿更值得补；母乳喂养、常吃鱼的孩子没必要"],
+[28,"儿童复合益生菌","75","中等偏强","C","LGG预防抗生素相关腹泻、罗伊氏DSM17938缓解母乳喂养婴儿肠绞痛有证据，但只对具体菌株成立。","产品写\"可能含……\"，菌株不明，就无法对应任何证据。","只买标明菌株号且对应你要解决问题的产品"],
+[29,"维生素D3液体滴剂","11.5","极强","A","婴儿每天400IU是中国和国际指南推荐，正好是这款的剂量；纠正维D缺乏确定有效。","—","婴幼儿（指南推荐）、确认缺乏者"],
+[30,"维生素D3软胶囊","9.85","极强","A","纠正缺乏有效。但普通成人补维D预防癌症、心血管（VITAL）和骨折（VITAL骨折研究，NEJM 2022）均为阴性。","\"每年检测一次\"与2024年美国内分泌学会指南相反，指南不建议健康成人常规检测。","晒太阳少、确认缺乏、老年人"],
+[31,"胶原蛋白肽","89","中等","D","2025年《美国医学杂志》对23项RCT的荟萃分析：高质量研究和非企业资助研究均无效，阳性结果来自企业资助的低质量研究。","\"肽吸收率>90%\"不代表会在皮肤里重新合成胶原。","不推荐"],
+[32,"益生元纤维粉","59","强","B","膳食纤维整体健康获益证据扎实（2019年《柳叶刀》荟萃分析）；菊粉对便秘有小幅改善。","从蔬菜、全谷物、豆类摄入更便宜。","纤维摄入不足、便秘者"],
+[33,"锌镁一水肌酸粉","27","强","A","一水肌酸配合力量训练能增加力量和肌肉，是运动补剂里证据最硬的，国际奥委会2018年共识列为证据良好。","锌镁（ZMA）提升睾酮的研究是阴性的。","规律力量训练者"],
+[34,"锯棕榈+番茄红素","29.5","中等(有争议)","D","两项高质量RCT阴性（STEP，NEJM 2006；CAMUS，JAMA 2011，剂量加到3倍仍无效），Cochrane结论无效。","表格写的\"2012 NEJM\"年份不对。","尿频夜尿请看泌尿科，有效药物很多"],
+[35,"玛卡+喜来芝","108.2","中等","D","玛卡对性欲只有小样本、结论不一；喜来芝几乎没有人体RCT。","阿育吠陀矿物类产品有重金属污染问题（2008年JAMA：约五分之一网售产品检出铅、汞或砷）。","不推荐"],
+[36,"胃友菌罗伊氏乳杆菌","92.5","中等偏强","C","Pylopass（DSM17648）是灭活菌，几项小研究显示能降低幽门螺杆菌数量，不能根除；DSM17938的证据在婴儿肠绞痛。","两种菌株用途完全不同，表格写\"可能为其一\"等于说不清卖的是什么。","幽门螺杆菌请规范四联疗法根除"],
+[37,"复合维生素B族","5.85","极强","B","只对缺乏者有用：素食者（B12）、长期吃二甲双胍或抑酸药的人、老年人。补B族降同型半胱氨酸整体未减少心梗；中国高血压人群补叶酸减少卒中（CSPPT，JAMA 2015）是例外。","—","素食者、老年人、长期用二甲双胍/抑酸药者"],
+[38,"中老年女士复合维生素","9","强","B","作为饮食保险可以，预防疾病证据不足；COSMOS研究显示老年人认知有小幅改善。","—","饮食差的中老年女性"],
+[39,"成人复合益生菌","89","中等偏强","C","效果高度依赖具体菌株；2018年《细胞》研究显示益生菌定植因人而异，抗生素后吃益生菌反而延缓自身菌群恢复。","菌株不明；\"活菌数越多越好\"没有证据。","只买标明菌株号的产品"],
+[40,"褪黑素口溶片","79","强","B","平均缩短入睡约7分钟（2013年荟萃分析）；倒时差有效。","国内有蓝帽子褪黑素，价格通常低得多。美国2023年检测发现褪黑素软糖实际含量为标示的74%–347%。","倒时差、倒班者短期用"],
+[41,"EPA鱼油 97%纯度","95","强","B","REDUCE-IT（纯EPA每天4克）心血管事件降25%，对象是已用他汀、甘油三酯偏高的高危人群；该试验用矿物油作安慰剂，被质疑放大了效果。","\"补充剂效果与处方药类似\"没有任何试验证明。95元/月的剂量大概率达不到每天4克。","高甘油三酯高危人群，应找医生开处方药"],
+[42,"NR","74.8","中等","C","能升高NAD+；多项人体RCT的临床终点阴性（胰岛素敏感性、肌肉线粒体功能）。","美国国家衰老研究所的干预测试计划中，NR未能延长小鼠寿命。","不推荐"],
+[43,"活性维生素B族","78.2","强","C","普通叶酸对MTHFR携带者同样有效，国内孕前补叶酸预防神经管缺陷用的就是普通叶酸。","\"约40%中国人必须用甲基叶酸\"\"建议做MTHFR基因检测\"与美国医学遗传学会建议相反。价格是同表蓝帽子B族的13倍。","买37号就够"],
+[44,"维生素D3+K2+钙","58.2","强","B","钙+D预防骨折的证据主要在养老院老人和缺乏者；美国预防服务工作组不推荐社区健康人低剂量补。钙补充剂与肾结石风险相关。K2：2024年丹麦AVADEC试验（304人）整体未减缓冠脉钙化进展，仅亚组阳性。","服用华法林的人禁用K2，表格没提。","骨质疏松风险高、饮食钙不足的老人"],
+[45,"中老年男士复合维生素","9","强","B","作为饮食保险可以，预防疾病证据不足。","硒+番茄红素护前列腺只有观察性关联；大型SELECT试验中硒没有预防前列腺癌。","饮食差的中老年男性"]
+];
+const d=x=>"https://doi.org/"+x, pm=x=>"https://pubmed.ncbi.nlm.nih.gov/"+x+"/", pmc=x=>"https://pmc.ncbi.nlm.nih.gov/articles/"+x+"/";
+const R={
+1:[["REDUCE-IT · NEJM 2019（处方纯EPA 4g）",d("10.1056/NEJMoa1812792")],["VITAL鱼油 · NEJM 2019（一级预防阴性）",d("10.1056/NEJMoa1811403")],["ASCEND · NEJM 2018（糖尿病人群阴性）",d("10.1056/NEJMoa1804989")],["DREAM干眼 · NEJM 2018（阴性）",d("10.1056/NEJMoa1709691")],["STRENGTH · JAMA 2020（EPA+DHA 4g 阴性）",d("10.1001/jama.2020.22258")],["鱼油与房颤荟萃 · Circulation 2021",'https://boris.unibe.ch/159997']],
+2:[["Depommier · Nature Medicine 2019（32人试点RCT）",d("10.1038/s41591-019-0495-2")]],
+3:[["Yoshino · Science 2021（25人）",d("10.1126/science.abe9985")],["NMN国内监管现状（虎嗅报道）",'https://m.huxiu.com/article/4845711.html',1]],
+4:[["McRae · 甜菜碱降同型半胱氨酸荟萃 2013",pmc("PMC3610948")],["甜菜碱升高总胆固醇荟萃",pm("31809615")]],
+5:[["Q-SYMBIO · JACC Heart Failure 2014",d("10.1016/j.jchf.2014.06.008")],["Cochrane 2016 · 辅酶Q10降血压",d("10.1002/14651858.CD007435.pub3")]],
+6:[["麦角硫因与死亡率（观察性）· Heart 2020",pm("31672783")],["Richie · 口服谷胱甘肽6个月 · Eur J Nutr 2015",d("10.1007/s00394-014-0706-z")],["Allen & Bradley · 口服谷胱甘肽无变化 2011",pmc("PMC3162377")]],
+7:[["Slutsky · Neuron 2010（大鼠）",d("10.1016/j.neuron.2009.12.026")],["Liu · J Alzheimers Dis 2016（44人）",d("10.3233/JAD-150538")]],
+8:[["Nelson · J Med Chem 2017 姜黄素药物化学综述",d("10.1021/acs.jmedchem.6b00975")],["意大利姜黄补充剂肝毒性评估",pm("33346172")]],
+9:[["Asadi Shahmirzadi · Cell Metab 2020（小鼠）",d("10.1016/j.cmet.2020.08.004")],["Demidenko · Aging 2021（无对照42人）",'https://www.aging-us.com/article/203736']],
+10:[["Felton & Anthony · Nature 2005（反驳PQQ是维生素）",d("10.1038/nature03322")],["FDA对PS的限定性健康声明（报道）",'https://www.naturalproductsinsider.com/claims/fda-allows-qualified-selenium-ps-health-claims',1]],
+11:[["Chandrasekhar · Indian J Psychol Med 2012（64人）",d("10.4103/0253-7176.106022")],["Lopresti · Medicine 2019",d("10.1097/MD.0000000000017186")],["各国监管时间线（报道）",'https://www.nutraingredients.com/Article/2026/07/06/timeline-will-authorities-de-throne-the-king-of-herbs/',1]],
+12:[],13:[],
+14:[["Cochrane 2007 · 水飞蓟治疗肝病",d("10.1002/14651858.CD003620.pub2")],["Wah Kheong · 脂肪肝48周RCT · Clin Gastroenterol Hepatol 2017",d("10.1016/j.cgh.2017.04.016")]],
+15:[["AREDS2 · JAMA 2013",d("10.1001/jama.2013.4997")],["AREDS2白内障 · JAMA Ophthalmol 2013（阴性）",d("10.1001/jamaophthalmol.2013.4412")]],
+16:[["GAIT · NEJM 2006",d("10.1056/NEJMoa052771")],["Wandel · BMJ 2010 网状荟萃",d("10.1136/bmj.c4675")],["美国风湿病学会骨关节炎指南 2019",d("10.1002/art.41142")]],
+17:[["Taku · Menopause 2012 潮热荟萃",d("10.1097/gme.0b013e3182410159")],["SPARE试验登记（骨密度阴性）",'https://clinicaltrials.gov/study/NCT00076050']],
+18:[["Kiechl · AJCN 2018（饮食观察研究）",pm("29955838")],["SmartAge · JAMA Netw Open 2022（RCT阴性）",pmc("PMC9136623")]],
+19:[["NAPS · Clin Hemorheol Microcirc 2021（3年RCT阴性）",d("10.3233/CH-211147")]],
+20:[["NATHAN 1 · Diabetes Care 2011（口服4年）",d("10.2337/dc11-0503")],["SYDNEY 2 · Diabetes Care 2006（口服短期）",d("10.2337/dc06-0216")],["硫辛酸诱发胰岛素自身免疫综合征病例",d("10.1177/2050313X18819601")]],
+21:[["Andreux · Nature Metabolism 2019（I期）",d("10.1038/s42255-019-0073-4")],["Liu · JAMA Netw Open 2022（66名老人）",pmc("PMC8777576")],["Singh · Cell Rep Med 2022（中年人）",pmc("PMC9133463")]],
+22:[["Shi & Williamson · Br J Nutr 2016（22人）",pm("26785820")]],
+23:[["Yin · Metabolism 2008（36人）",d("10.1016/j.metabol.2008.01.013")]],
+24:[["USPSTF 2022 · JAMA",d("10.1001/jama.2022.8970")],["39万人队列：复合维生素与死亡率（NCI新闻稿）",'https://www.cancer.gov/news-events/press-releases/2024/multivitamins-do-not-lower-risk-of-death',1]],
+25:[["USPSTF 2022 · JAMA",d("10.1001/jama.2022.8970")]],
+26:[["美国医学研究所 2011 钙与维D膳食参考摄入量（含上限）",'https://nap.nationalacademies.org/catalog/13050']],
+27:[["Cochrane 2017 · 足月婴儿补充长链多不饱和脂肪酸",d("10.1002/14651858.CD000376.pub4")],["Cochrane 2018 · 孕期补充omega-3",d("10.1002/14651858.CD003402.pub3")]],
+28:[],
+29:[["美国内分泌学会 2024 维生素D指南",d("10.1210/clinem/dgae290")]],
+30:[["VITAL维D · NEJM 2019",d("10.1056/NEJMoa1809944")],["VITAL骨折 · NEJM 2022",d("10.1056/NEJMoa2202106")],["美国内分泌学会 2024 维生素D指南",d("10.1210/clinem/dgae290")]],
+31:[["Myung & Park · Am J Med 2025 荟萃（报道）",'https://www.cosmeticsdesign.com/Article/2025/08/26/industry-reacts-to-meta-analysis-concluding-collagen-supplements-show-no-proven-benefit-for-skin-aging',1]],
+32:[["Reynolds · Lancet 2019 膳食纤维荟萃",d("10.1016/S0140-6736(18)31809-9")]],
+33:[["国际运动营养学会肌酸立场声明 2017",d("10.1186/s12970-017-0173-z")],["国际奥委会膳食补充剂共识 · BJSM 2018",d("10.1136/bjsports-2018-099027")],["Wilborn · ZMA对睾酮无影响 2004",d("10.1186/1550-2783-1-2-12")]],
+34:[["STEP · NEJM 2006",d("10.1056/NEJMoa053085")],["CAMUS · JAMA 2011",d("10.1001/jama.2011.1344")]],
+35:[["Saper · JAMA 2008 阿育吠陀产品重金属",d("10.1001/jama.300.8.915")]],
+36:[],
+37:[["CSPPT · JAMA 2015（中国高血压人群叶酸）",d("10.1001/jama.2015.2274")]],
+38:[["USPSTF 2022 · JAMA",d("10.1001/jama.2022.8970")]],
+39:[["Suez · Cell 2018（抗生素后益生菌）",d("10.1016/j.cell.2018.08.047")],["Zmora · Cell 2018（定植因人而异）",d("10.1016/j.cell.2018.08.041")]],
+40:[["Ferracioli-Oda · PLoS One 2013 荟萃",d("10.1371/journal.pone.0063773")],["Cochrane 2002 · 褪黑素与时差",d("10.1002/14651858.CD001520")],["褪黑素软糖含量检测（JAMA 2023 报道）",'https://www.nutraingredients.com/Article/2023/04/26/Wake-up-call-or-false-alarm-New-JAMA-paper-reports-problems-with-melatonin-gummies',1]],
+41:[["REDUCE-IT · NEJM 2019",d("10.1056/NEJMoa1812792")],["STRENGTH · JAMA 2020",d("10.1001/jama.2020.22258")]],
+42:[["ITP · NR未延长小鼠寿命 · GeroScience 2021",pmc("PMC8135004")],["Dollerup · AJCN 2018（胰岛素敏感性阴性）",d("10.1093/ajcn/nqy132")],["Elhassan · Cell Reports 2019",d("10.1016/j.celrep.2019.07.043")]],
+43:[["美国医学遗传学会 · 不建议MTHFR检测 2013",d("10.1038/gim.2012.165")]],
+44:[["USPSTF 2018 · 维D与钙预防骨折",d("10.1001/jama.2018.3185")],["Knapen · Osteoporos Int 2013（K2骨密度）",d("10.1007/s00198-013-2325-6")],["AVADEC 试验结果（报道）",'https://www.nutraingredients.com/Article/2024/01/18/study-links-vitamin-k2-and-d-to-cardiovascular-disease',1]],
+45:[["SELECT · JAMA 2009（硒未预防前列腺癌）",d("10.1001/jama.2008.864")],["USPSTF 2022 · JAMA",d("10.1001/jama.2022.8970")]]
+};
+const NOREF={12:"只有日本小样本试验，没有值得单独引用的高质量研究。",13:"牡蛎提取物提升睾酮/精力没有可引用的人体RCT。",28:"产品未标明菌株，无法对应具体研究。",36:"产品未标明菌株（DSM17648 与 DSM17938 研究完全不同），无法对应具体研究。"};
+
+const myScore={A:4,B:3,C:2,D:1};
+const col={A:"var(--gA)",B:"var(--gB)",C:"var(--gC)",D:"var(--gD)"};
+const label={A:"证据扎实",B:"有条件",C:"薄弱",D:"智商税"};
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const band={"极强":4,"强":4,"中等偏强":3,"中等":3,"中等(有争议)":2.5};
+const down=D.filter(r=>myScore[r[4]]<band[r[3]]).length;
+document.getElementById("downN").textContent=down;
+const cnt={A:0,B:0,C:0,D:0};D.forEach(r=>cnt[r[4]]++);
+document.getElementById("dist").innerHTML=["A","B","C","D"].map(g=>`<div style="flex:${cnt[g]};background:${col[g]}" title="${g} ${label[g]}：${cnt[g]}款">${g} · ${cnt[g]}</div>`).join("");
+const list=document.getElementById("list"),empty=document.getElementById("empty"),q=document.getElementById("q");
+let cur="all";
+function refHTML(n){
+  const L=R[n]||[];
+  if(!L.length) return `<p class="refs-none"><b>研究原文：</b>${esc(NOREF[n]||"—")}</p>`;
+  return `<div class="refs"><b>研究原文：</b><ul>${L.map(x=>`<li><a href="${x[1]}" target="_blank" rel="noopener">${esc(x[0])}</a>${x[2]?'<span class="tag">报道</span>':''}</li>`).join("")}</ul></div>`;
+}
+function render(){
+  const k=q.value.trim().toLowerCase();
+  const rows=D.filter(r=>(cur==="all"||r[4]===cur)&&(!k||(r[1]+r[5]+r[6]).toLowerCase().includes(k)));
+  list.innerHTML=rows.map(r=>`<article class="item" style="--c:${col[r[4]]}">
+    <div class="head"><span class="no">#${r[0]}</span><span class="name">${esc(r[1])}</span><span class="price">¥${r[2]}/月</span>
+    <span class="ratings"><span>原表 <span class="orig">${esc(r[3])}</span></span><span class="pill p${r[4]}" title="${label[r[4]]}">${r[4]}</span></span></div>
+    <p class="ev">${esc(r[5])}</p>
+    ${r[6]&&r[6]!=="—"?`<p class="fix"><b>表格问题/风险：</b>${esc(r[6])}</p>`:""}
+    <p class="who"><b>适合谁：</b>${esc(r[7])}</p>
+    ${refHTML(r[0])}</article>`).join("");
+  empty.hidden=rows.length>0;
+}
+document.querySelectorAll(".controls button").forEach(b=>b.addEventListener("click",()=>{
+  cur=b.dataset.g;document.querySelectorAll(".controls button").forEach(x=>x.setAttribute("aria-pressed",x===b?"true":"false"));render();}));
+q.addEventListener("input",render);
+render();
+</script>
+
+</body>
+</html>
